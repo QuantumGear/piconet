@@ -73,6 +73,5 @@ def main():
             print(f"No arguments provided. Type `{sys.argv[0]} -h` for help.")
     except PiconetError as e:
         print(f"Error while command:\n  {e}")
-    # we are done - close scopes, just to be safe
-    for device in devices:
-        device.close()
+        # exit with error
+        sys.exit(1)
