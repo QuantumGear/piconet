@@ -75,3 +75,7 @@ def main():
         print(f"Error while command:\n  {e}")
         # exit with error
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
