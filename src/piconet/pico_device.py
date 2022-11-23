@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import ctypes
 import numpy as np
+from abc import abstractmethod, ABCMeta
 
 from picosdk.functions import adc2mV, assert_pico_ok, assert_pico2000_ok, mV2adc
-
 from picosdk.discover import find_all_units
 from picosdk.errors import DeviceNotFoundError
 
@@ -19,7 +19,21 @@ def list_devices() -> list:
         return []
 
 
-class Ps2000Device:
+class OpenError(Exception):
+    pass
+
+
+class AbstractScope(metaclass=ABCMeta):
+    @abstractmethod
+    def open(self):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def close(self):
+        raise NotImplementedError()
+
+
+class Ps2000Device(AbstractScope):
     def __init__(self):
         self.chandle = ctypes.c_int16()
         self.status = {}
@@ -30,7 +44,8 @@ class Ps2000Device:
 
         # picoscope channels
         self.channels = {"A": 0, "B": 1}
-        self.ch_range = 7  # 2V
+        self._ch_A_range = 7  # 2V
+        self._ch_B_range = 7  # 2V
 
         preTriggerSamples = 1000
         postTriggerSamples = 1000
@@ -42,19 +57,75 @@ class Ps2000Device:
         self.oversample = ctypes.c_int16(1)
         self.maxSamplesReturn = ctypes.c_int32()
 
+        # allowed channel values in volts
+        self.allowed_ch_ranges = {
+            0.02: 1,
+            0.05: 2,
+            0.1: 3,
+            0.2: 4,
+            0.5: 5,
+            1.0: 6,
+            2.0: 7,
+            5.0: 8,
+            10.0: 9,
+            20.0: 10,
+        }
+
+    # __enter__  method is executed when entering 'with'
+    def __enter__(self):
+        self.open()
+        return self
+
+    # __exit__ method is executed when leabing 'with'
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
     # Open the picoscope
-    def initialize(self):
+    def open(self):
         self.status["openUnit"] = self.ps.ps2000_open_unit()
         # self.status["openunit"] = self.ps.open_unit(ctypes.byref(self.chandle))
         assert_pico2000_ok(self.status["openUnit"])
+
+    def close(self):
+        # Stop the scope
+        self.status["stop"] = self.ps.ps2000_stop(self.chandle)
+
+        # Close unitDisconnect the scope
+        self.status["close"] = self.ps.ps2000_close_unit(self.chandle)
+        assert_pico2000_ok(self.status["close"])
+
+    @property
+    def ch_A_range(self):
+        return self._ch_A_range
+
+    @ch_A_range.setter
+    def ch_A_range(self, value):
+        if value not in self.allowed_ch_ranges:
+            print("Wrong channel range")
+        else:
+            if self._ch_A_range != self.allowed_ch_ranges[value]:
+                self._ch_A_range = self.allowed_ch_ranges[value]
+
+    @property
+    def ch_B_range(self):
+        return self._ch_B_range
+
+    @ch_B_range.setter
+    def ch_B_range(self, value):
+        if self._ch_B_range != value:
+            self._ch_B_range = value
 
     def set_channel(self, ch_name):
         self.chandle = ctypes.c_int16(self.status["openUnit"])
         channel = self.channels[ch_name]
         coupling = 1  # DC
+        if ch_name == "A":
+            ch_range = self._ch_A_range
+        else:
+            ch_range = self._ch_B_range
 
         self.status[f"setCh{ch_name}"] = self.ps.ps2000_set_channel(
-            self.chandle, channel, 1, coupling, self.ch_range
+            self.chandle, channel, 1, coupling, ch_range
         )
 
     def set_trigger(self):
@@ -73,7 +144,7 @@ class Ps2000Device:
             ctypes.byref(self.maxSamplesReturn),
         )
 
-    def run_block(self):
+    def acquire_data(self):
         timeIndisposedms = ctypes.c_int32()
         self.status["runBlock"] = self.ps.ps2000_run_block(
             self.chandle,
@@ -106,28 +177,23 @@ class Ps2000Device:
         maxADC = ctypes.c_int16(32767)
 
         # convert ADC counts data to mV
-        adc2mVChA = adc2mV(bufferA, self.ch_range, maxADC)
+        adc2mVChA = adc2mV(bufferA, self._ch_A_range, maxADC)
 
         # Create time data
         time = np.linspace(
             0, (cmaxSamples.value - 1) * self.timeInterval.value, cmaxSamples.value
         )
 
-        # plot data from channel A and B
-        plt.plot(time, adc2mVChA[:])
-        plt.xlabel("Time (ns)")
-        plt.ylabel("Voltage (mV)")
-        plt.show()
+        return time, adc2mVChA[:]
 
-        # Stop the scope
-        # handle = chandle
-        self.status["stop"] = self.ps.ps2000_stop(self.chandle)
+    def measure_permanent(self):
+        import random
 
-        # Close unitDisconnect the scope
-        # handle = chandle
-        self.status["close"] = self.ps.ps2000_close_unit(self.chandle)
-        assert_pico2000_ok(self.status["close"])
-        print(self.status)
+        while True:
+            time, data = self.acquire_data()
+            yield [time, data]
+            if random.randint(0, 100) > 80:
+                return
 
 
 class Ps5000aDevice:
@@ -210,19 +276,24 @@ def make_device_class(version):
 
 
 if __name__ == "__main__":
-    # bla = make_device_class('ps5000')
-    # bla.call()
+    time = 0
+    voltage = 0
+    with Ps2000Device() as sc:
+        sc.ch_A_range = 0.1
+        sc.set_channel("A")
+        sc.set_trigger()
+        sc.get_timebase()
 
-    # blup = make_device_class('ps6000')
-    # blup.call()
-    # dev = list_devices()
-    # print(dev)
+        # test yield generator
+        # for data in sc.measure_permanent():
+        # print(data)
 
-    test = Ps2000Device()
-    test.initialize()
-    test.set_channel("A")
-    test.set_trigger()
-    test.get_timebase()
-    test.run_block()
+        time, voltage = sc.acquire_data()
+
+    # plot data from channel A and B
+    plt.plot(time, voltage)
+    plt.xlabel("Time (ns)")
+    plt.ylabel("Voltage (mV)")
+    plt.show()
 
     # print(const.k)
