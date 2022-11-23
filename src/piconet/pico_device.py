@@ -4,8 +4,6 @@ import numpy as np
 from abc import abstractmethod, ABCMeta
 
 from picosdk.functions import adc2mV, assert_pico_ok, assert_pico2000_ok, mV2adc
-
-#!/usr/bin/env python3
 from picosdk.discover import find_all_units
 from picosdk.errors import DeviceNotFoundError
 
