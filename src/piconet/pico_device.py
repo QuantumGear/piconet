@@ -43,7 +43,8 @@ class Ps2000Device(AbstractScope):
 
         # picoscope channels
         self.channels = {'A' : 0, 'B' : 1}
-        self.ch_range = 7 # 2V
+        self._ch_A_range = 7 # 2V
+        self._ch_B_range = 7 # 2V
 
         preTriggerSamples = 1000
         postTriggerSamples = 1000
@@ -54,6 +55,18 @@ class Ps2000Device(AbstractScope):
         self.timeUnits = ctypes.c_int32()
         self.oversample = ctypes.c_int16(1)
         self.maxSamplesReturn = ctypes.c_int32()
+
+        # allowed channel values in volts
+        self.allowed_ch_ranges = {0.02 : 1,
+            0.05 : 2,
+            0.1 : 3,
+            0.2 : 4,
+            0.5 : 5,
+            1.0 : 6,
+            2.0 : 7,
+            5.0 : 8,
+            10.0 : 9,
+            20.0 : 10}
 
     # __enter__  method is executed when entering 'with'
     def __enter__(self):
@@ -66,27 +79,50 @@ class Ps2000Device(AbstractScope):
 
     # Open the picoscope
     def open(self):
-        print('open')
         self.status["openUnit"] = self.ps.ps2000_open_unit()
         # self.status["openunit"] = self.ps.open_unit(ctypes.byref(self.chandle))
         assert_pico2000_ok(self.status["openUnit"])
 
     def close(self):
         # Stop the scope
-        print('close')
         self.status["stop"] = self.ps.ps2000_stop(self.chandle)
 
         # Close unitDisconnect the scope
         self.status["close"] = self.ps.ps2000_close_unit(self.chandle)
         assert_pico2000_ok(self.status["close"])
 
+    @property
+    def ch_A_range(self):
+        return self._ch_A_range
+
+    @ch_A_range.setter
+    def ch_A_range(self, value):
+        if value not in self.allowed_ch_ranges:
+            print('Wrong channel range')
+        else:
+            if self._ch_A_range != self.allowed_ch_ranges[value]:
+                self._ch_A_range = self.allowed_ch_ranges[value]
+
+    @property
+    def ch_B_range(self):
+        return self._ch_B_range
+
+    @ch_B_range.setter
+    def ch_B_range(self, value):
+        if self._ch_B_range != value:
+            self._ch_B_range = value 
+
 
     def set_channel(self, ch_name):
         self.chandle = ctypes.c_int16(self.status["openUnit"])
         channel = self.channels[ch_name]
         coupling = 1 # DC
+        if ch_name == 'A':
+            ch_range = self._ch_A_range
+        else:
+            ch_range = self._ch_B_range
 
-        self.status[f"setCh{ch_name}"] = self.ps.ps2000_set_channel(self.chandle, channel, 1, coupling, self.ch_range)
+        self.status[f"setCh{ch_name}"] = self.ps.ps2000_set_channel(self.chandle, channel, 1, coupling, ch_range)
 
     def set_trigger(self):
         self.status["trigger"] = self.ps.ps2000_set_trigger(self.chandle, 0, 64, 0, 0, 1000)
@@ -117,12 +153,22 @@ class Ps2000Device(AbstractScope):
         maxADC = ctypes.c_int16(32767)
 
         # convert ADC counts data to mV
-        adc2mVChA =  adc2mV(bufferA, self.ch_range, maxADC)
+        adc2mVChA =  adc2mV(bufferA, self._ch_A_range, maxADC)
 
         # Create time data
         time = np.linspace(0, (cmaxSamples.value -1) * self.timeInterval.value, cmaxSamples.value)
 
         return time, adc2mVChA[:]
+
+    def measure_permanent(self):
+        import random
+        while True:
+            time, data = self.acquire_data()
+            yield [time, data]
+            if random.randint(0, 100) > 80:
+                return
+
+
 
 
 
@@ -206,9 +252,19 @@ if __name__ == '__main__':
     time = 0
     voltage = 0
     with Ps2000Device() as sc:
+        sc.ch_A_range = 0.1
         sc.set_channel('A')
         sc.set_trigger()
         sc.get_timebase()
+
+        # test yield generator
+        # for data in sc.measure_permanent():
+            # print(data)
+
+        
+
+
+
         time, voltage = sc.acquire_data()
 
     # plot data from channel A and B
