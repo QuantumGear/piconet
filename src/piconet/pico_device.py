@@ -8,7 +8,7 @@ from picosdk.discover import find_all_units
 from picosdk.errors import DeviceNotFoundError
 
 import matplotlib.pyplot as plt
-
+import asyncio
 
 def list_devices() -> list:
     # We need to do try-except because picosdk throws an error if no devices connected.
@@ -144,7 +144,7 @@ class Ps2000Device(AbstractScope):
             ctypes.byref(self.maxSamplesReturn),
         )
 
-    def acquire_data(self):
+    def acquire_data(self, blocking=True):
         timeIndisposedms = ctypes.c_int32()
         self.status["runBlock"] = self.ps.ps2000_run_block(
             self.chandle,
@@ -154,11 +154,20 @@ class Ps2000Device(AbstractScope):
             ctypes.byref(timeIndisposedms),
         )
 
+        if not blocking:
+            return None
+        data = None
+        while data is None:
+            data = self.get_aquired_data()
+        return data
+
+    def get_aquired_data(self):
         ready = ctypes.c_int16(0)
         check = ctypes.c_int16(0)
-        while ready.value == check.value:
-            self.status["isReady"] = self.ps.ps2000_ready(self.chandle)
-            ready = ctypes.c_int16(self.status["isReady"])
+        self.status["isReady"] = self.ps.ps2000_ready(self.chandle)
+        ready = ctypes.c_int16(self.status["isReady"])
+        if ready.value == check.value:
+            return None
 
         bufferA = (ctypes.c_int16 * self.maxSamples)()
         bufferB = (ctypes.c_int16 * self.maxSamples)()
@@ -186,14 +195,24 @@ class Ps2000Device(AbstractScope):
 
         return time, adc2mVChA[:]
 
+    async def acquire_data_coro(self):
+        sc.acquire_data(blocking=False)
+        data = None
+        while data is None:
+            await asyncio.wait(0)
+            data = sc.get_aquired_data()
+        return data
+
+    @property
+    def is_running(self):
+        return True
+
     def measure_permanent(self):
         import random
 
-        while True:
+        while self.is_running:
             time, data = self.acquire_data()
             yield [time, data]
-            if random.randint(0, 100) > 80:
-                return
 
 
 class Ps5000aDevice:
@@ -284,6 +303,17 @@ if __name__ == "__main__":
         sc.set_trigger()
         sc.get_timebase()
 
+        sc.acquire_data(blocking=False)
+        data = None
+        while data is None:
+            data = sc.get_aquired_data()
+            asyncio.wait(0.01)
+        # gen = sc.measure_permanent()
+        # for i in range(3):
+        #     data = gen.next()
+        # for i, data in enumerate(sc.measure_permanent()):
+        #     if i > 10:
+        #         break
         # test yield generator
         # for data in sc.measure_permanent():
         # print(data)
