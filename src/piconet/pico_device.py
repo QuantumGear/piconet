@@ -196,11 +196,11 @@ class Ps2000Device(AbstractScope):
         return time, adc2mVChA[:]
 
     async def acquire_data_coro(self):
-        sc.acquire_data(blocking=False)
+        self.acquire_data(blocking=False)
         data = None
         while data is None:
-            await asyncio.wait(0)
-            data = sc.get_aquired_data()
+            await asyncio.sleep(0)
+            data = self.get_aquired_data()
         return data
 
     @property
@@ -214,84 +214,6 @@ class Ps2000Device(AbstractScope):
             time, data = self.acquire_data()
             yield [time, data]
 
-
-class Ps5000aDevice:
-    def __init__(self):
-        self.chandle = ctypes.c_int16()
-        self.status = {}
-
-        # import the pidcodsk module
-        module = __import__("picosdk.ps5000a")
-        self.ps = module.ps5000a.ps5000a
-
-        # picoscope channels
-        self.channels = {i: f"PS5000a_CHANNEL_{i}" for i in ["A", "B"]}
-
-        self.resolution = self.ps.PS5000A_DEVICE_RESOLUTION["PS5000A_DR_12BIT"]
-
-    # Open the picoscope
-    def initialize(self):
-        self.status["openunit"] = self.ps.ps5000aOpenUnit(
-            ctypes.byref(self.chandle), None, self.resolution
-        )
-        # self.status["openunit"] = self.ps.open_unit(ctypes.byref(self.chandle))
-        print(self.status)
-        assert_pico_ok(self.status["openunit"])
-
-    def set_channel(self, ch_name):
-        channel = self.ps.PS5000A_CHANNEL[self.channels[ch_name]]
-        ch_range = self.ps.PS5000A_RANGE["PS5000A_20V"]
-        coupling = 1  # DC
-
-        status[f"setCh{ch_name}"] = self.ps.ps5000aSetChannel(
-            chandle, channel, 1, coupling, ch_range
-        )
-        assert_pico_ok(status[f"setCh{ch_name}"])
-
-
-class Ps6000Device:
-    def __init__(self):
-        self.chandle = ctypes.c_int16()
-        self.status = {}
-
-        # import the pidcodsk module
-        module = __import__("picosdk.ps6000")
-        self.ps = module.ps6000.ps6000
-
-    # Open the picoscope
-    def initialize(self):
-        self.status["openunit"] = self.ps.ps6000OpenUnit(ctypes.byref(self.chandle))
-        print(self.status)
-        assert_pico_ok(status["openunit"])
-
-
-class PicoDevice1:
-    def __init__(self):
-        scipy = __import__("scipy.constants")
-        self.const = scipy.constants
-        print(1)
-
-    def call(self):
-        print("dumm")
-        print(self.const.k)
-        test = {i: f"PS5000_CHANNEL_{i}" for i in ["A", "B"]}
-        print(test)
-
-
-class PicoDevice2:
-    def __init__(self):
-        print(2)
-
-    def call(self):
-        print("batz")
-
-
-def make_device_class(version):
-    if version == "ps5000":
-        device = PicoDevice1()
-    else:
-        device = PicoDevice2()
-    return device
 
 
 if __name__ == "__main__":
