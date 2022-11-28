@@ -8,6 +8,7 @@ from picosdk.discover import find_all_units
 from picosdk.errors import DeviceNotFoundError
 
 import matplotlib.pyplot as plt
+import asyncio
 
 
 def list_devices() -> list:
@@ -144,7 +145,7 @@ class Ps2000Device(AbstractScope):
             ctypes.byref(self.maxSamplesReturn),
         )
 
-    def acquire_data(self):
+    def acquire_data(self, blocking=True):
         timeIndisposedms = ctypes.c_int32()
         self.status["runBlock"] = self.ps.ps2000_run_block(
             self.chandle,
@@ -154,11 +155,20 @@ class Ps2000Device(AbstractScope):
             ctypes.byref(timeIndisposedms),
         )
 
+        if not blocking:
+            return None
+        data = None
+        while data is None:
+            data = self.get_aquired_data()
+        return data
+
+    def get_aquired_data(self):
         ready = ctypes.c_int16(0)
         check = ctypes.c_int16(0)
-        while ready.value == check.value:
-            self.status["isReady"] = self.ps.ps2000_ready(self.chandle)
-            ready = ctypes.c_int16(self.status["isReady"])
+        self.status["isReady"] = self.ps.ps2000_ready(self.chandle)
+        ready = ctypes.c_int16(self.status["isReady"])
+        if ready.value == check.value:
+            return None
 
         bufferA = (ctypes.c_int16 * self.maxSamples)()
         bufferB = (ctypes.c_int16 * self.maxSamples)()
@@ -186,93 +196,24 @@ class Ps2000Device(AbstractScope):
 
         return time, adc2mVChA[:]
 
+    async def acquire_data_coro(self):
+        self.acquire_data(blocking=False)
+        data = None
+        while data is None:
+            await asyncio.sleep(0)
+            data = self.get_aquired_data()
+        return data
+
+    @property
+    def is_running(self):
+        return True
+
     def measure_permanent(self):
         import random
 
-        while True:
+        while self.is_running:
             time, data = self.acquire_data()
             yield [time, data]
-            if random.randint(0, 100) > 80:
-                return
-
-
-class Ps5000aDevice:
-    def __init__(self):
-        self.chandle = ctypes.c_int16()
-        self.status = {}
-
-        # import the pidcodsk module
-        module = __import__("picosdk.ps5000a")
-        self.ps = module.ps5000a.ps5000a
-
-        # picoscope channels
-        self.channels = {i: f"PS5000a_CHANNEL_{i}" for i in ["A", "B"]}
-
-        self.resolution = self.ps.PS5000A_DEVICE_RESOLUTION["PS5000A_DR_12BIT"]
-
-    # Open the picoscope
-    def initialize(self):
-        self.status["openunit"] = self.ps.ps5000aOpenUnit(
-            ctypes.byref(self.chandle), None, self.resolution
-        )
-        # self.status["openunit"] = self.ps.open_unit(ctypes.byref(self.chandle))
-        print(self.status)
-        assert_pico_ok(self.status["openunit"])
-
-    def set_channel(self, ch_name):
-        channel = self.ps.PS5000A_CHANNEL[self.channels[ch_name]]
-        ch_range = self.ps.PS5000A_RANGE["PS5000A_20V"]
-        coupling = 1  # DC
-
-        status[f"setCh{ch_name}"] = self.ps.ps5000aSetChannel(
-            chandle, channel, 1, coupling, ch_range
-        )
-        assert_pico_ok(status[f"setCh{ch_name}"])
-
-
-class Ps6000Device:
-    def __init__(self):
-        self.chandle = ctypes.c_int16()
-        self.status = {}
-
-        # import the pidcodsk module
-        module = __import__("picosdk.ps6000")
-        self.ps = module.ps6000.ps6000
-
-    # Open the picoscope
-    def initialize(self):
-        self.status["openunit"] = self.ps.ps6000OpenUnit(ctypes.byref(self.chandle))
-        print(self.status)
-        assert_pico_ok(status["openunit"])
-
-
-class PicoDevice1:
-    def __init__(self):
-        scipy = __import__("scipy.constants")
-        self.const = scipy.constants
-        print(1)
-
-    def call(self):
-        print("dumm")
-        print(self.const.k)
-        test = {i: f"PS5000_CHANNEL_{i}" for i in ["A", "B"]}
-        print(test)
-
-
-class PicoDevice2:
-    def __init__(self):
-        print(2)
-
-    def call(self):
-        print("batz")
-
-
-def make_device_class(version):
-    if version == "ps5000":
-        device = PicoDevice1()
-    else:
-        device = PicoDevice2()
-    return device
 
 
 if __name__ == "__main__":
@@ -284,6 +225,17 @@ if __name__ == "__main__":
         sc.set_trigger()
         sc.get_timebase()
 
+        sc.acquire_data(blocking=False)
+        data = None
+        while data is None:
+            data = sc.get_aquired_data()
+            asyncio.wait(0.01)
+        # gen = sc.measure_permanent()
+        # for i in range(3):
+        #     data = gen.next()
+        # for i, data in enumerate(sc.measure_permanent()):
+        #     if i > 10:
+        #         break
         # test yield generator
         # for data in sc.measure_permanent():
         # print(data)
