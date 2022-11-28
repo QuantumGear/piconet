@@ -10,6 +10,7 @@ from picosdk.errors import DeviceNotFoundError
 import matplotlib.pyplot as plt
 import asyncio
 
+
 def list_devices() -> list:
     # We need to do try-except because picosdk throws an error if no devices connected.
     # In this case we just return an empty list.
@@ -213,7 +214,6 @@ class Ps2000Device(AbstractScope):
         while self.is_running:
             time, data = self.acquire_data()
             yield [time, data]
-
 
 
 if __name__ == "__main__":

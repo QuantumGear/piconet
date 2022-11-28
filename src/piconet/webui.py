@@ -3,6 +3,7 @@ import qcontrol4.gui.web.widgets as qw
 import asyncio
 import matplotlib.pyplot as plt
 
+
 async def capture_coro(plot):
     time = 0
     voltage = 0
@@ -13,7 +14,7 @@ async def capture_coro(plot):
         sc.get_timebase()
         while True:
             data = await sc.acquire_data_coro()
-            fig, ax = plt.subplots(figsize=(1000/72,400/72))
+            fig, ax = plt.subplots(figsize=(1000 / 72, 400 / 72))
             ax.plot(*data)
             plot.value = fig
 
@@ -26,5 +27,5 @@ async def main():
     await asyncio.gather(app.launch_task(), capture_coro(plot))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())
