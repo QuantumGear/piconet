@@ -2,12 +2,22 @@ from .pico_device import Ps2000Device
 import qcontrol4.gui.web.widgets as qw
 import asyncio
 import matplotlib.pyplot as plt
+from matplotlib import Figure
 import numpy as np
 import logging
 import sys
+from typing import Optional, Callable, Union
+
+"""
+To do:
+- implement abstract class
+- implement dummy class
+- add doc strings
+- add types
+"""
 
 
-class Osci:
+class PicoScope:
     def __init__(self):
         self.ch_range = 0.1
         self.channel_name = "A"
@@ -31,22 +41,9 @@ class Osci:
                 data = await self.sc.acquire_data_coro()
                 fig, ax = plt.subplots(figsize=(1000 / 72, 400 / 72))
                 ax.plot(*data)
-                print("time")
-                print(data[0][:10])
-                print("volatge")
-                print(data[1][:10])
                 self._capture_cb(fig)
 
-            # await asyncio.sleep(0.01)
-            # if self._capture_cb:
-            #     x = np.linspace(0, 5, 20)
-            #     y = x**2 + np.random.normal(0, 0.5, 20)
-            #     fig, ax = plt.subplots(figsize=(1000 / 72, 400 / 72))
-            #     ax.plot(x, y)
-            #     self._capture_cb(fig)
-
     def oneshot(self):
-        print("test")
         x = np.linspace(0, 5, 20)
         y = np.linspace(0, 5, 20)
         fig, ax = plt.subplots(figsize=(1000 / 72, 400 / 72))
@@ -63,13 +60,16 @@ class Osci:
     def stop_capture(self):
         self._running = False
 
+    def __del__(self):
+        self.sc.close()
+
 
 def main():
     plt.style.use("dark_background")
-    scope = Osci()
+    scope = PicoScope()
     with qw.Blocks() as app:
         with qw.Row():
-            plot = qw.Plot()
+            plot = qw.Plot(scale=3)
             with qw.Column():
                 vrange = qw.Radio(
                     label="Voltage range", value="0.1", choices=["0.1", "1", "10"]
