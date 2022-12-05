@@ -8,38 +8,42 @@ import sys
 from typing import Optional, Callable, Union
 from abc import abstractmethod, ABCMeta
 
-"""
-To do:
-- implement abstract class
-- implement dummy class
-- add doc strings
-- add types
-"""
-
 
 class AbstractScope(metaclass=ABCMeta):
+    """An abstract scope class based on the ABC library
+    All scope classes should be inheritated from AbstractScope to
+    enforce implementation of the following methods.
+    """
+
     @abstractmethod
     def update(self):
+        """Updates parameters of the scope"""
         raise NotImplementedError()
 
     @abstractmethod
     async def capture_coro(self):
+        """Asynchronious corotine to capture data"""
         raise NotImplementedError()
 
     @abstractmethod
     def singleshot(self):
+        """Captures a single shot of data"""
         raise NotImplementedError()
 
     @abstractmethod
     def start_capture(self):
+        """Starts data acquisition"""
         raise NotImplementedError()
 
     @abstractmethod
     def stop_capture(self):
+        """Stops data acquisition"""
         raise NotImplementedError()
 
 
 class DummyScope(AbstractScope):
+    """A dummy class of a scope to test the webui."""
+
     def __init__(self):
         self.ch_range = 0.1
         self._running = False
@@ -78,6 +82,8 @@ class DummyScope(AbstractScope):
 
 
 class PicoScope(AbstractScope):
+    """Implementation of a PicoScope for the webui."""
+
     def __init__(self):
         self.ch_range = 0.1
         self.channel_name = "A"
