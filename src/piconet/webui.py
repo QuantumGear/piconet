@@ -16,6 +16,7 @@ To do:
 - add types
 """
 
+
 class AbstractScope(metaclass=ABCMeta):
     @abstractmethod
     def update(self):
@@ -38,11 +39,11 @@ class AbstractScope(metaclass=ABCMeta):
         raise NotImplementedError()
 
 
-
 class DummyScope(AbstractScope):
     def __init__(self):
         self.ch_range = 0.1
         self._running = False
+        self.delay = 0.1
 
     def update(self):
         return
@@ -50,9 +51,10 @@ class DummyScope(AbstractScope):
     async def capture_coro(self):
         n = 50
         while self._running:
+            await asyncio.sleep(self.delay)
             if self._capture_cb:
                 x = np.linspace(0, 5, n)
-                y = x**2 + np.rand.normal(0, 1, n)
+                y = x**2 + np.random.normal(0, 1, n)
                 fig, ax = plt.subplots(figsize=(1000 / 72, 400 / 72))
                 ax.plot(x, y)
                 self._capture_cb(fig)
@@ -75,7 +77,7 @@ class DummyScope(AbstractScope):
         self._running = False
 
 
-class PicoScope:
+class PicoScope(AbstractScope):
     def __init__(self):
         self.ch_range = 0.1
         self.channel_name = "A"
@@ -124,8 +126,8 @@ class PicoScope:
 
 def main():
     plt.style.use("dark_background")
-    # scope = PicoScope()
-    scope = DummyScope()
+    scope = PicoScope()
+    # scope = DummyScope()
     with qw.Blocks() as app:
         with qw.Row():
             plot = qw.Plot(scale=3)
